@@ -335,7 +335,7 @@ final class SQLiteIndexManager implements IndexManager {
               IndexEntry.create(
                   fieldIndex.getIndexId(),
                   document.getKey(),
-                  document.hasLocalMutations() ? user.getUid() : null,
+                  user.getUid(),
                   directionalValue,
                   encodeSingleElement(arrayValue)));
         }
@@ -345,7 +345,7 @@ final class SQLiteIndexManager implements IndexManager {
           IndexEntry.create(
               fieldIndex.getIndexId(),
               document.getKey(),
-              document.hasLocalMutations() ? user.getUid() : null,
+              user.getUid(),
               directionalValue,
               /* arrayValue= */ null));
     }
@@ -358,26 +358,18 @@ final class SQLiteIndexManager implements IndexManager {
         "INSERT INTO index_entries (index_id, uid, array_value, directional_value, document_name) "
             + "VALUES(?, ?, ?, ?, ?)",
         indexEntry.getIndexId(),
-        document.hasLocalMutations() ? user.getUid() : null,
+        user.getUid(),
         indexEntry.getArrayValue(),
         indexEntry.getDirectionalValue(),
         document.getKey().toString());
   }
 
   private void deleteIndexEntry(Document document, IndexEntry indexEntry) {
-    // TODO(indexing): Always include a user ID for indices and stop sharing index definitions
-    if (document.hasLocalMutations()) {
-      db.execute(
-          "DELETE FROM index_entries WHERE index_id = ? AND uid = ? AND document_key = ?",
-          indexEntry.getIndexId(),
-          document.hasLocalMutations(),
-          document.getKey().toString());
-    } else {
-      db.execute(
-          "DELETE FROM index_entries WHERE index_id = ? AND uid IS NULL AND document_name = ?",
-          indexEntry.getIndexId(),
-          document.getKey().toString());
-    }
+    db.execute(
+        "DELETE FROM index_entries WHERE index_id = ? AND uid = ? AND document_key = ?",
+        indexEntry.getIndexId(),
+        user.getUid(),
+        document.getKey().toString());
   }
 
   private SortedSet<IndexEntry> getExistingIndexEntries(
@@ -385,7 +377,7 @@ final class SQLiteIndexManager implements IndexManager {
     SortedSet<IndexEntry> results = new TreeSet<>();
     db.query(
             "SELECT uid, directional_value, array_value FROM index_entries "
-                + "WHERE index_id = ? AND document_name = ? AND (uid IS NULL OR uid = ?)")
+                + "WHERE index_id = ? AND document_name = ? AND uid = ?")
         .binding(fieldIndex.getIndexId(), documentKey.toString(), user.getUid())
         .forEach(
             row ->
@@ -467,7 +459,7 @@ final class SQLiteIndexManager implements IndexManager {
     // and an upper bound.
     StringBuilder statement = new StringBuilder();
     statement.append("SELECT document_name, directional_value FROM index_entries ");
-    statement.append("WHERE index_id = ?  AND (uid IS NULL or uid = ?) ");
+    statement.append("WHERE index_id = ? AND uid = ? ");
     if (arrayValues != null) {
       statement.append("AND array_value = ? ");
     }
